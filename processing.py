@@ -1,15 +1,18 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
-from pyspark.sql.types import StructType, StringType
+from pyspark.sql.types import StructType, StringType, BooleanType
 from pyspark.sql.functions import udf
 import text_processing
 from dotenv import load_dotenv
 import os
+import time
 from pyspark.sql.functions import monotonically_increasing_id
+from pyspark.sql.functions import hash
+import checkDuplicate
 load_dotenv()
-
 while True:
     sentiment_udf = udf(text_processing.get_sentiment, StringType())
+    #check_udf=udf(checkDuplicate.check, BooleanType())
     snowflake_options = {
         "sfURL": "https://"+os.getenv("SNOW_ACCOUNT")+".snowflakecomputing.com",
         "sfUser": "SNOW_USER",
@@ -67,8 +70,19 @@ while True:
         .select("data.*") \
         .withColumn("sentiment", sentiment_udf(col("content"))) \
 
-    parsed_df_with_id=parsed_df.withColumn("ID", monotonically_increasing_id())
+    #parsed_df_with_id=parsed_df.withColumn("ID", )
+    # filtered_df = parsed_df.filter(col("valid") == True)
+
+    # filtered_df = parsed_df.filter(check_udf(col("article")))
+
+
+
+    parsed_df_with_id = parsed_df.withColumn("ID", monotonically_increasing_id())
     parsed_df=parsed_df_with_id.select("ID", *parsed_df.columns)
+    parsed_df.show()
+
+
+    print(parsed_df)
 
     parsed_df.write \
         .format("snowflake") \
@@ -76,4 +90,6 @@ while True:
         .option("dbtable", "NEWS") \
         .mode("append") \
         .save()
-
+    
+    checkDuplicate.deduplicate()
+    time.sleep(6000)
